@@ -4,7 +4,6 @@ Phase 1 only: embedders, chunking strategies, retrieval modes. 1,000 documents,
 exact search, no generation. Sized for a 15W CPU laptop (Core Ultra 5, 16GB, no
 dGPU) so all 14 configs can be swept in an afternoon.
 
-Phases 2 and 3 are described in context/02-plan.md but are not implemented here.
 
     python scripts/gen_configs.py
 """

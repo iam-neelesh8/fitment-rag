@@ -9,16 +9,16 @@ Every dataset touched by this repo, what it is licensed for, and how it is used 
 | | |
 |---|---|
 | **Source** | https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023 |
-| **Config used** | `raw_meta_Automotive` (~2M product listings) |
+| **File used** | `raw/meta_categories/meta_Automotive.jsonl` (5.35 GB, ~2M listings) |
 | **Maintainer** | McAuley Lab, UC San Diego |
 | **Terms** | Released for **research use with citation**. Not licensed for re-hosting. |
 | **How used here** | Primary corpus. Downloaded at build time, cached to `data/raw/`. |
 | **Redistributed?** | **No.** `data/` is gitignored. `load_documents()` regenerates it. |
 
-Reproducibility without redistribution works because the sample is deterministic: rows are
-selected by a stable hash of each product's ASIN seeded with `data.seed`, not by shuffling. The
-same `n_docs` yields the same documents on any machine, in any `datasets` version, regardless of
-streaming order.
+Reproducibility without redistribution works because the sample is deterministic: the loader
+streams the file from the start and keeps every `stride`-th usable row until it has `n_docs`. The
+same settings yield the same documents on any machine. This is a prefix scan rather than a uniform
+draw -- sampling uniformly would mean transferring all 5.35 GB for even a small corpus.
 
 `corpus_checksum()` hashes the `(doc_id, text)` pairs, and that checksum is written into every
 `results/*/metrics.json`. A reviewer runs the same config, compares checksums, and knows byte-for-byte
@@ -43,30 +43,17 @@ whether they are looking at the same corpus before comparing any metric.
 | model | license | used for |
 |---|---|---|
 | `sentence-transformers/all-MiniLM-L6-v2` | Apache 2.0 | default embedder |
-| `sentence-transformers/all-mpnet-base-v2` | Apache 2.0 | large-embedder reference |
+| `sentence-transformers/all-mpnet-base-v2` | Apache 2.0 | config provided, not run |
 | `BAAI/bge-small-en-v1.5` | MIT | embedder comparison |
 | `intfloat/e5-small-v2` | MIT | embedder comparison |
 | `thenlper/gte-small` | MIT | embedder comparison |
-| `cross-encoder/ms-marco-MiniLM-L-6-v2` | Apache 2.0 | optional reranker |
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | Apache 2.0 | reranker |
 
 Weights are downloaded by `sentence-transformers` at runtime and are not vendored here.
 
 ---
 
-## 3. Generation models (Ollama)
-
-| model | license | notes |
-|---|---|---|
-| `qwen2.5:1.5b-instruct` | Apache 2.0 | default generator |
-| `qwen2.5:3b-instruct` | Qwen Research License | non-commercial research terms — check before commercial use |
-| `llama3.2:1b`, `llama3.2:3b` | Llama 3.2 Community License | attribution and use restrictions apply |
-| `gemma2:2b` | Gemma Terms of Use | prohibited-use policy applies |
-
-All are pulled by the user through Ollama; no weights are redistributed here.
-
----
-
-## 4. Deliberately not used
+## 3. Deliberately not used
 
 **Retailer and manufacturer catalog PDFs.** Publicly downloadable is not the same as licensed for
 reuse. Those catalogs are copyrighted, and site terms typically restrict copying and
@@ -83,7 +70,7 @@ are marked "unknown". Any that are added later must be CC0 or CC-BY and listed i
 
 ---
 
-## 5. Planned addition — ACES/PIES sample data
+## 4. Planned addition — ACES/PIES sample data
 
 The Auto Care Association publishes free sample ACES (fitment) and PIES (product information)
 files through its Digital Hub. These are the real industry interchange standards and would give

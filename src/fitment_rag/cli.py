@@ -6,7 +6,7 @@
     fitment-rag sweep   --configs "configs/phase1/emb/*.yaml"
     fitment-rag compare --sort recall@5
 
-Phase 1 is retrieval only -- there is no generation step. See context/02-plan.md.
+Retrieval only -- there is no generation step.
 """
 
 from __future__ import annotations

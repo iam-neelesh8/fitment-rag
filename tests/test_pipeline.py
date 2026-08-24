@@ -1,4 +1,4 @@
-"""Offline tests: no network, no model downloads, no Ollama.
+"""Offline tests: no network, no model downloads.
 
 These cover the logic that is easy to get subtly wrong -- chunk id round-tripping,
 metric arithmetic, config fingerprinting -- so a broken sweep fails in seconds

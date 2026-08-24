@@ -5,15 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fitment-rag"
 version = "0.1.0"
-description = "Phase 1 of an open, reproducible RAG retrieval benchmark for auto-parts data"
+description = "A reproducible retrieval benchmark for auto-parts product data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
-    # Scope: Phase 1 is RETRIEVAL ONLY -- no generation, no LLM, no Ollama, and
-    # exact search only. Phases 2-4 (approximate indexes, scale, generation) are
-    # planned in context/02-plan.md but not implemented, so nothing they would
-    # need is a dependency here.
+    # Retrieval only: no generation, no LLM, exact search. Nothing an unbuilt
+    # phase would need belongs here.
     #
     # `datasets` is deliberately absent: version 4.x removed script-based
     # loaders, which Amazon-Reviews-2023 still ships, so the corpus is streamed
