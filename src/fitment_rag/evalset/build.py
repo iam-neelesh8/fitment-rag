@@ -9,29 +9,9 @@ metadata fields that are almost always present (`store`, `price`,
 `average_rating`, `categories`). Hallucination risk is zero and the gold
 document is known by construction.
 
-Three rules keep the questions honest, and the first version of this file got
-the third one wrong:
-
-1. NO ANSWER LEAKAGE. Terms that appear in the answer are stripped from the
-   question. Otherwise "Who makes the Caltric ignition coil?" hands over the
-   answer "Caltric" for free.
-
-2. UNIQUE BY CONSTRUCTION. Each question keeps adding title terms until exactly
-   one document in the corpus contains all of them. Without this, a question
-   could legitimately describe several products and the "gold" document would be
-   arbitrary -- silently punishing a retriever that found an equally valid match.
-
-3. NO VERBATIM TITLE. The original version quoted the full product title, so the
-   question contained the document's own first line word for word. That is
-   string lookup, not retrieval: every config scored a perfect 1.0, BM25
-   included, and the benchmark could not distinguish anything. Questions now use
-   a MINIMAL set of descriptive title terms -- enough to be unambiguous, not
-   enough to be a copy.
-
-Part-number-like tokens are also excluded from question terms. They are perfect
-lexical keys, so including them recreates the same trivial-match problem.
-
-LLM-written questions are a Phase 4 item; see context/02-plan.md.
+Not built from `details`: it holds 246 distinct keys across 500 sampled
+products, most on only a handful, which is too sparse to be reliable ground
+truth.
 """
 
 from __future__ import annotations
@@ -168,10 +148,7 @@ def build_eval_set(
     seed: int = 17,
 ) -> list[dict]:
     if generator != "template":
-        raise ValueError(
-            f"unknown generator: {generator!r}. Phase 1 ships the deterministic "
-            "template generator only; LLM-written questions are Phase 4."
-        )
+        raise ValueError(f"unknown generator: {generator!r}")
 
     rng = random.Random(seed)
     order = list(range(len(docs)))

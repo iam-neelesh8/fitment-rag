@@ -22,7 +22,7 @@ from .embedding import Embedder
 from .evalset.build import load_eval_set
 from .metrics.retrieval import aggregate, score_query
 from .retrieval import Retriever
-from .vectorstores.registry import build_store
+from .vectorstore import FaissIndex
 
 INDEX_DIR = DATA_DIR / "indexes"
 
@@ -51,18 +51,18 @@ def build_index(cfg: RunConfig, verbose: bool = True):
         print(f"[embed]  {cfg.embedding.model}  dim={embedder.dim}  device={embedder.device}")
     vectors, embed_seconds = embedder.embed_corpus([c["text"] for c in chunks], cfg.index_id)
 
-    store = build_store(cfg.vectorstore.backend, embedder.dim, cfg.vectorstore.params)
-    index_path = INDEX_DIR / cfg.index_id / cfg.vectorstore.backend
+    store = FaissIndex(embedder.dim)
+    index_path = INDEX_DIR / cfg.index_id / store.name
 
     if (index_path / "index.faiss").exists():
         store.load(index_path)
         if verbose:
-            print(f"[index]  loaded cached {cfg.vectorstore.backend}")
+            print(f"[index]  loaded cached {store.name}")
     else:
         store.build(vectors, [c["chunk_id"] for c in chunks])
         store.save(index_path)
         if verbose:
-            print(f"[index]  built {cfg.vectorstore.backend} in {store.build_seconds:.1f}s")
+            print(f"[index]  built {store.name} in {store.build_seconds:.1f}s")
 
     stats = {
         "n_docs": len(docs),

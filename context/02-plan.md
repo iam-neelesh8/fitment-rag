@@ -198,7 +198,8 @@ Roughly in order of value per hour:
 4. **A real fitment layer.** ACES/PIES sample data turns this from a generic product benchmark
    into a domain-credible auto-parts one. This is the single highest-value upgrade for the
    ecommerce career goal. See `DATA_LICENSES.md`.
-5. **Qdrant backend.** `vectorstores/registry.py` raises `NotImplementedError` with instructions.
+5. **Approximate indexes.** `vectorstore.py` holds one exact FAISS index; HNSW, IVF or an
+   external store would slot in beside it.
 6. **Normalised SQL view of the catalog.** Products + EAV attributes + categories as real tables,
    then denormalise back to documents with a `GROUP_CONCAT`. Enables metadata filtering
    ("ceramic brake pads under $50") and matches the shape real catalog data arrives in.

@@ -13,7 +13,7 @@ import pytest
 from fitment_rag.chunking import chunk_documents
 from fitment_rag.config import ChunkConfig, RunConfig
 from fitment_rag.metrics.retrieval import dedupe_docs, mrr, ndcg_at_k, recall_at_k, score_query
-from fitment_rag.vectorstores.registry import build_store
+from fitment_rag.vectorstore import FaissIndex
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def test_faiss_flat_returns_exact_nearest_neighbour():
     vecs = rng.normal(size=(50, 8)).astype("float32")
     vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
 
-    store = build_store("faiss_flat", 8)
+    store = FaissIndex(8)
     store.build(vecs, [f"C{i}" for i in range(50)])
 
     ids, scores = store.search(vecs[3:4], top_k=3)
@@ -90,11 +90,6 @@ def test_faiss_flat_returns_exact_nearest_neighbour():
     assert scores[0][0] == pytest.approx(1.0, abs=1e-4)
 
 
-@pytest.mark.parametrize("backend", ["pinecone", "faiss_hnsw", "chroma"])
-def test_unimplemented_backends_are_rejected(backend):
-    """Phase 1 is exact-search only; anything else must fail loudly, not silently."""
-    with pytest.raises(ValueError):
-        build_store(backend, 8)
 
 
 # --- config fingerprinting ------------------------------------------------

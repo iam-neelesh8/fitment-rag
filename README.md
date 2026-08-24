@@ -1,87 +1,176 @@
 # fitment-rag
 
-A reproducible benchmark for **retrieval** over auto-parts product data. It answers one question
-that most RAG write-ups skip:
+Which part of a retrieval pipeline actually determines quality — the embedding model, the chunking
+strategy, or the retrieval algorithm?
 
-> **Which part of a retrieval pipeline actually determines quality — and what does each part cost?**
+This measures all three on 10,000 auto-parts product listings, varying one at a time, with
+confidence intervals and paired significance tests. Runs on a CPU laptop: no GPU, no API keys,
+no paid services.
 
-Not a RAG demo. A controlled study: every setting is varied one at a time against a fixed set of
-questions, and the price of each choice is reported next to its benefit.
-
-Runs entirely on a CPU laptop. No GPU, no API keys, no paid services, no private data.
-
----
-
-## Early result
-
-From the retrieval comparison — 10,000 products, 39,026 chunks, 200 questions:
-
-| method | hit@1 | recall@5 | MRR | ms/query |
-|---|---|---|---|---|
-| hybrid + cross-encoder rerank | 0.995 | 1.000 | 0.998 | 1389 |
-| **BM25** (keyword only, no neural net) | **0.945** | 0.995 | 0.967 | 78 |
-| hybrid (RRF, alpha = 0.5) | 0.740 | 0.920 | 0.811 | 82 |
-| dense (all-MiniLM-L6-v2) | 0.545 | 0.705 | 0.612 | 3.4 |
-
-**BM25 — a keyword-scoring formula from 1994 — beat the embedding model by 40 points on hit@1.**
-
-Auto-parts questions are dominated by brand names and model codes ("olifant hydraulic rear"),
-which are rare tokens. BM25 weights rare tokens heavily; embedding models have weak
-representations for rare proper nouns. Dense retrieval returned products that were topically
-right and specifically wrong.
-
-Two caveats stated up front, because they matter more than the headline:
-
-1. **The eval set is built by lexical uniqueness** — question terms are chosen until they appear
-   in exactly one document. That is precisely what BM25 optimises for, so the gap is real but
-   inflated by the benchmark's own construction.
-2. **Hybrid scoring worse than BM25 alone is a tuning artefact**, not a finding. `hybrid_alpha`
-   is fixed at 0.5, so weak dense results dilute strong BM25 ones. Nobody tuned it.
+**Answer: the embedding model, by a wide margin.**
 
 ---
 
-## Quick start
+## Results
 
-**Requires Python 3.10+ and [Poetry 2.x](https://python-poetry.org/docs/#installation).**
-Poetry 1.x will not work — it ignores the PEP 621 `[project]` table.
+10,000 documents, 2,000 questions, scored on a held-out half (n=959).
+
+| factor | best → worst | spread | significant |
+|---|---|---|---|
+| Embedding model | 0.856 → 0.518 | **33.8 pp** | yes, p < 0.0001 |
+| Retrieval mode | 0.981 → 0.856 | **12.3 pp** | yes, p < 0.0001 |
+| Chunking strategy | 0.878 → 0.853 | **2.5 pp** | yes, p = 0.021 |
+
+Embedding model choice moved hit@1 **13× more than chunking** and **3× more than retrieval mode**.
+
+<details>
+<summary><b>Full results table</b></summary>
+
+Held-out test split. `hit@1` = fraction of questions whose correct product ranked first.
+
+| config | hit@1 | 95% CI | ms/query |
+|---|---|---|---|
+| hybrid + cross-encoder rerank | 0.981 | [0.971, 0.988] | 1373 |
+| hybrid (RRF) | 0.937 | [0.920, 0.951] | 80 |
+| BM25 | 0.925 | [0.906, 0.940] | 81 |
+| dense, sentence-512 chunks | 0.878 | [0.856, 0.897] | 3 |
+| dense, fixed-256 chunks | 0.866 | [0.842, 0.886] | 3 |
+| dense, fixed-1024 chunks | 0.864 | [0.841, 0.885] | 3 |
+| dense, fixed-512 chunks (e5-small) | 0.856 | [0.832, 0.877] | 4 |
+| dense, whole documents | 0.853 | [0.829, 0.874] | 3 |
+| dense, bge-small | 0.759 | [0.731, 0.785] | 5 |
+| dense, gte-small | 0.657 | [0.626, 0.686] | 27 |
+| dense, all-MiniLM-L6-v2 | 0.518 | [0.487, 0.550] | 2 |
+
+Paired comparisons on the same split:
+
+| comparison | difference | wins | p |
+|---|---|---|---|
+| e5-small vs MiniLM | +33.8 pp | 348–24 | <0.0001 |
+| e5-small vs bge-small | +9.7 pp | 123–30 | <0.0001 |
+| BM25 vs dense | +6.9 pp | 112–46 | <0.0001 |
+| rerank vs hybrid | +4.4 pp | 54–12 | <0.0001 |
+| sentence-512 vs whole documents | +2.5 pp | 62–38 | 0.021 |
+| sentence-512 vs fixed-512 | +2.2 pp | 44–23 | 0.014 |
+| hybrid vs BM25 | +1.3 pp | 48–36 | **0.230 (tied)** |
+
+</details>
+
+### Three things worth pulling out
+
+**BM25 beats dense retrieval by 6.9 pp.** A keyword-scoring formula from 1994, no neural network,
+outperforms a modern embedding model. Auto-parts queries are dominated by brand names and part
+codes — rare tokens that BM25 weights heavily and embedding models represent poorly. BM25 is also
+the default scorer in Elasticsearch, so this is worth knowing before planning a migration to
+vector search.
+
+**Hybrid retrieval is not better than BM25 alone** (p = 0.23). Combining the two at equal weight
+buys nothing here. `hybrid_alpha` was left untuned at 0.5, so this is a statement about the
+default, not about hybrid search in general.
+
+**Chunking barely matters, and only sentence-aware splitting helps.** The best strategy beats the
+worst by 2.5 pp. `sentence-512` and `fixed-512` produce almost identical chunk counts (37,277 vs
+39,026) but differ by 2.2 pp — so what matters is where the boundary falls, not how many pieces
+you make. Median document here is 1,438 characters; on longer documents chunking would matter far
+more.
+
+---
+
+## Reproduce it
+
+### 1. Requirements
+
+- Python 3.10 or newer
+- [Poetry 2.x](https://python-poetry.org/docs/#installation) — version 1.x will not work, it
+  ignores the PEP 621 `[project]` table
+- ~4 GB disk for the corpus cache, embeddings, and indexes
+- No GPU needed
 
 ```bash
 git clone https://github.com/iam-neelesh8/fitment-rag.git
 cd fitment-rag
-
 poetry install --extras "nb dev"
 poetry run fitment-rag doctor
 ```
 
 `doctor` should print `ok` for torch, sentence_transformers, faiss, and rank_bm25.
 
-### Run the benchmark
+> **Windows note.** If `poetry install` fails with a long-path error, the venv is too deep for the
+> 260-character limit. The committed `poetry.toml` puts it at `C:\venvs` to avoid this.
+
+### 2. Build the eval set
 
 ```bash
-# 1. Download the corpus and build the questions  (~2 min, streams from HuggingFace)
-poetry run fitment-rag build-evalset --config configs/phase1_smoke.yaml -n 200
-
-# 2. One config end to end  (~15 min first time: embeds 39k chunks on CPU)
-poetry run fitment-rag run --config configs/phase1_smoke.yaml
-
-# 3. Compare retrieval methods  (fast, reuses the cached embeddings)
-poetry run fitment-rag sweep --configs "configs/phase1/retrieval/*.yaml"
-
-# 4. The leaderboard
-poetry run fitment-rag compare --sort recall@5
+poetry run fitment-rag build-evalset --config configs/phase1_smoke.yaml -n 2000
 ```
 
-Every stage caches, so re-running a config is instant and changing one setting only recomputes
-what depends on it.
+Streams 10,000 product listings from Hugging Face and generates 2,000 questions. **~5 minutes.**
+Writes `evalsets/amazon_automotive_10k_n2000.jsonl`.
 
-Other sweeps:
+This file is committed, so you can diff yours against it to confirm you generated the same
+questions before comparing any numbers.
+
+### 3. Run the experiments
+
+Each group varies one setting. Embeddings are cached, so later runs reuse earlier work.
 
 ```bash
-poetry run fitment-rag sweep --configs "configs/phase1/emb/*.yaml"     # ~2 hours
-poetry run fitment-rag sweep --configs "configs/phase1/chunk/*.yaml"   # ~1 hour
+# Embedding models — 4 configs, ~30 min each on first run
+poetry run fitment-rag sweep --configs "configs/phase1/emb/*.yaml"
+
+# Chunking strategies — 5 configs, ~2 hours total
+poetry run fitment-rag sweep --configs "configs/phase1/chunk/*.yaml"
+
+# Retrieval modes — 3 fast configs
+poetry run fitment-rag sweep --configs "configs/phase1/retrieval/bm25.yaml"
+poetry run fitment-rag run   --config  configs/phase1/retrieval/hybrid.yaml
+
+# The reranker is slow: 1.3 s/query x 2000 = ~45 min
+poetry run fitment-rag run --config configs/phase1/retrieval/hybrid-rerank.yaml
 ```
 
-### Notebooks
+**Total: 4–5 hours on a 15 W laptop CPU**, dominated by embedding. Runs are independent and
+resumable — everything caches to `data/`, so an interrupted sweep picks up where it stopped.
+
+`configs/phase1/emb/mpnet-base.yaml` is provided but was not run; it needs roughly two more hours
+and would extend the comparison beyond the 22–33M parameter class.
+
+### 4. Read the results
+
+```bash
+poetry run fitment-rag compare --sort hit@1
+```
+
+Prints every run with a Wilson confidence interval. Add `--csv results/leaderboard.csv` to export.
+
+### 5. Test whether differences are real
+
+A leaderboard ordering is not a finding. These are the numbers a claim needs:
+
+```python
+from fitment_rag.stats import compare_runs_split, scores_by_split
+
+# Paired significance test on the held-out split
+compare_runs_split("emb-e5-small", "emb-minilm-l6", split="test")
+# {'difference': 0.3379, 'a_wins': 348, 'b_wins': 24, 'p_value': 0.0, 'significant': True}
+
+# Check a config was not simply fitted to the selection half
+scores_by_split("emb-e5-small")
+# {'dev': {'score': 0.8588}, 'test': {'score': 0.8561}, 'dev_minus_test': 0.0027}
+```
+
+For a whole group at once:
+
+```python
+from fitment_rag.stats import significance_table
+significance_table(["chunk-sent512", "chunk-fixed512", "chunk-whole",
+                    "chunk-fixed256", "chunk-fixed1024"])
+```
+
+Read the `bonferroni_significant` column, not `significant` — ten comparisons at α=0.05 will
+produce a false positive about half the time.
+
+### 6. Notebooks (optional)
 
 ```bash
 poetry run python -m ipykernel install --user --name fitment-rag \
@@ -89,215 +178,140 @@ poetry run python -m ipykernel install --user --name fitment-rag \
 poetry run jupyter lab notebooks/
 ```
 
-Select the **Python (fitment-rag)** kernel.
-
-| notebook | what it does |
+| notebook | contents |
 |---|---|
-| `00_understand_the_data.ipynb` | **Start here.** The real schema, measured: field fill rates, the `details` long tail, document lengths, and how a raw row becomes retrievable text |
-| `01_pipeline_walkthrough.ipynb` | Builds the pipeline one stage at a time, stopping to show what changed |
-| `02_retrieval_experiments.ipynb` | Runs the sweeps and produces the leaderboard |
-
----
-
-## What gets compared
-
-Every config comes from one shared base in `scripts/gen_configs.py`, so **the only difference
-between two runs is the setting named in the filename**. Change two things at once and the result
-tells you nothing.
-
-```
-                        base config
-                             |
-        +--------------------+--------------------+
-        |                    |                    |
-   [1a] EMBEDDER        [1b] CHUNKING       [1c] RETRIEVAL
-   5 models             5 strategies        4 modes
-        |                    |                    |
-        +--------------------+--------------------+
-                             |
-                        leaderboard()
-```
-
-**14 configs — added, not multiplied.** A full 5x5x4 grid would be 100 runs and days of CPU. The
-trade-off: this design finds which setting matters most, but cannot detect interactions between
-settings.
-
-<details>
-<summary><b>1a — Embedding models (5)</b></summary>
-
-| tag | model | params | dim |
-|---|---|---|---|
-| minilm-l6 | `all-MiniLM-L6-v2` | 22M | 384 |
-| bge-small | `BAAI/bge-small-en-v1.5` | 33M | 384 |
-| e5-small | `intfloat/e5-small-v2` | 33M | 384 |
-| gte-small | `thenlper/gte-small` | 33M | 384 |
-| mpnet-base | `all-mpnet-base-v2` | 110M | 768 |
-
-bge and e5 were trained with instruction prefixes (`query:` / `passage:`). They are set in the
-configs — omitting them silently costs several points of recall, and is one of the most common
-ways a public embedding comparison ends up quietly rigged.
-</details>
-
-<details>
-<summary><b>1b — Chunking (5)</b></summary>
-
-Sizes are in **characters**. Measured on the real corpus:
-
-| strategy | chunks per doc |
-|---|---|
-| `whole_doc` | 1.00 |
-| `fixed 256 / 32` | 7.36 |
-| `fixed 512 / 64` | 3.92 (default) |
-| `fixed 1024 / 128` | 2.21 |
-| `sentence 512 / 64` | 3.73 |
-
-Median document is 1,438 characters, so 94% of documents split at 512. `fixed 256` costs 7.4x the
-embedding time of `whole_doc` for the same corpus.
-</details>
-
-<details>
-<summary><b>1c — Retrieval mode (4)</b></summary>
-
-| mode | how it finds documents |
-|---|---|
-| `bm25` | word overlap, weighted so rare words count more. No neural network. |
-| `dense` | embed the question, find nearest vectors by cosine similarity |
-| `hybrid` | both, merged by reciprocal rank fusion |
-| `hybrid + rerank` | as above, then a cross-encoder re-scores the top 50 |
-
-BM25 is the honesty check. If the neural stack cannot beat a keyword baseline, that is the single
-most useful thing this benchmark can report.
-</details>
+| `00_understand_the_data.ipynb` | The real schema — field fill rates, the `details` long tail, document lengths, how a row becomes retrievable text |
+| `01_pipeline_walkthrough.ipynb` | The pipeline one stage at a time |
+| `02_retrieval_experiments.ipynb` | Sweeps and the leaderboard |
 
 ---
 
 ## How it works
 
 ```
-  Amazon Automotive          [1] CORPUS       stream JSONL, cache locally
-  product metadata     ->    load_documents()
-  (HuggingFace, 5.35 GB)          |
-                                  v
-                             [2] CHUNK        ids are {doc_id}::{ordinal}
-                             chunk_documents()
-                                  |
-                                  v
-                             [3] EMBED        L2-normalised -> IP == cosine
-                             Embedder
-                                  |
-                                  v
-                             [4] INDEX        FAISS flat — exhaustive, exact
-                             VectorStore
-                                  |
-     question  ------------> [5] RETRIEVE     dense / bm25 / hybrid
-                             Retriever
-                                  |
-                                  v
-                             [6] SCORE        hit@k, recall@k, MRR, nDCG
-                             metrics/          scored at DOCUMENT level
-                                  |
-                                  v
-                          results/{run_id}/
-                            metrics.json  config.json  records.jsonl
+Amazon Automotive        stream JSONL, cache locally      data/raw/
+product metadata    ->   10,000 documents
+(5.35 GB on HF)               |
+                              v
+                         split into chunks                 data/chunks/
+                         ids are {doc_id}::{ordinal}
+                              |
+                              v
+                         embed with sentence-transformers  data/embeddings/
+                         L2-normalised, so IP == cosine
+                              |
+                              v
+                         FAISS flat index (exact)          data/indexes/
+                              |
+   question  ----------->  retrieve: dense / bm25 / hybrid
+                           dedupe to top-5 documents
+                              |
+                              v
+                         score: hit@k, MRR, nDCG           results/{run_id}/
 ```
 
-`run_id` is a hash of the config, so a results directory is a fingerprint of the settings that
-produced it. You cannot accidentally compare two runs that differed in a setting you forgot about.
+`run_id` is a hash of the config, so a results directory names the exact settings that produced
+it. Two runs that differ in any setting cannot collide.
 
-Metrics are scored at **document** level, not chunk level. Chunk counts vary 7x across chunking
-strategies, so chunk-level scoring would make the chunking comparison meaningless.
+### What makes the numbers trustworthy
+
+**One variable at a time.** All 14 configs are generated from a single base in
+`scripts/gen_configs.py`, so the only difference between two runs is the setting named in the
+filename.
+
+**Scored per document, not per chunk.** Chunk counts vary 7× across strategies. `top_k` counts
+distinct documents, so a strategy producing more chunks does not get more candidate documents for
+free — an earlier version counted chunks and that alone reversed the chunking ranking.
+
+**Held-out split.** `e5-small` was selected because it won, so reporting its score on the same
+questions would inflate it. Every configuration decision is made on `dev`; every headline number
+comes from `test`. Mean dev−test gap across all runs: 0.6 pp.
+
+**Confidence intervals and paired tests on everything.** At n=200 the interval on hit@1 is ±5 pp,
+wide enough to make a 2 pp difference look like a trend. At n=2,000 it is ±1.6 pp.
+
+**Every query is auditable.** `results/*/records.jsonl` holds the retrieved chunks and per-query
+scores for every question, so any average can be checked against the cases behind it.
+
+**Corpus checksums.** Every `metrics.json` carries a hash of the documents used. Compare it before
+comparing scores.
 
 ---
 
-## Reproducibility
+## Data
 
-> **The corpus is regenerated, never redistributed. The eval set ships in the repo.**
+Amazon Reviews 2023, Automotive product metadata (McAuley Lab, UCSD) — research use with
+citation, not licensed for re-hosting. The corpus is therefore **regenerated, never
+redistributed**: `data/` is gitignored and rebuilt by the commands above.
 
-The Amazon Reviews 2023 dataset is licensed for research with citation, not for re-hosting. So
-`data/` is gitignored and rebuilt by a script. What *does* ship is `evalsets/` — the questions,
-the answers, and which document each answer came from. That is what a skeptical reader actually
-needs in order to check the numbers.
+The eval set *is* committed, since it is the artifact a reader needs to check the numbers.
 
-Three things make a result auditable:
+Questions are generated deterministically, with answers extracted from metadata fields rather than
+written by a model. Three rules keep them honest, each with a regression test in
+`tests/test_evalset.py`:
 
-- **`corpus_checksum`** in every `metrics.json` — a hash of the documents used. Run the same
-  config, compare the checksum, and you know you started from identical inputs.
-- **`records.jsonl`** — every retrieved chunk and every score, per query. Audit one question
-  instead of trusting an average.
-- **`config.json`** — the exact settings, stored next to the numbers they produced.
-
-### How the questions are built
-
-Answers are **extracted, not generated**, from metadata fields that are almost always present
-(`store`, `price`, `average_rating`, `categories`). No LLM, no hallucination risk, and the correct
-document is known by construction.
-
-Three rules keep them honest, each with a regression test in `tests/test_evalset.py`:
-
-1. **No verbatim title.** Questions use a minimal set of descriptive terms.
+1. **No verbatim titles.** An earlier version quoted the full product title, so every question
+   contained its target document's first line. Every config scored a perfect 1.000 and the
+   benchmark could not distinguish anything.
 2. **No answer leakage.** Terms appearing in the answer are stripped, so "Who makes the Bosch
-   brake pad?" cannot give away the answer "Bosch".
+   brake pad?" cannot give away "Bosch".
 3. **Unique by construction.** Terms are added until exactly one document matches, so the correct
-   label is never arbitrary.
+   answer is never ambiguous.
 
-Rule 3 exists because the first version violated it. Questions quoted the full product title, so
-each question contained the first line of its own target document — string lookup, not retrieval.
-Every config scored a perfect 1.0, BM25 included, and nothing could be distinguished from anything
-else. The commit history has the fix.
+Full provenance in [`DATA_LICENSES.md`](DATA_LICENSES.md). No scraped or proprietary catalogs are
+used anywhere in this project.
+
+---
+
+## Limitations
+
+- **One corpus, one domain, one sample.** A single prefix sample of one dataset, not multiple
+  seeds. Treat this as a case study, not a general result.
+- **Questions are templated.** Terms are drawn from product titles and validated by lexical
+  overlap, which favours BM25. The task is closer to entity lookup than to open-ended question
+  answering.
+- **The task may be near ceiling.** Reranking reaches 0.981 and `hit@5` exceeds 0.95 nearly
+  everywhere, so `hit@5` no longer separates configurations.
+- **The MiniLM result deserves a second look.** A 33.8 pp gap between two models of the same size
+  class is larger than public benchmarks would predict. Worth confirming that tokenizer settings
+  are equivalent before treating it as a model property.
+- **Timings are unreliable.** Measured on a thermally throttled laptop while other work was
+  running. `gte-small` at 27 ms/query against 4 ms for identically sized models is almost
+  certainly contention, not a model property.
+- **Exact search only.** No approximate-index comparison, and the corpus is small enough that
+  approximate search would solve a problem that does not exist here.
+- **No generation step.** This measures retrieval only. An LLM cannot recover a document that was
+  never retrieved, so retrieval is settled first.
 
 ---
 
 ## Layout
 
 ```
-src/fitment_rag/      the library — notebooks import from here, nothing is duplicated
-  config.py           typed YAML config; hashes into run_id / corpus_id / index_id
-  data/amazon.py      HTTP streaming, row -> document flattening, checksum
-  chunking.py         whole_doc / fixed / sentence
+src/fitment_rag/
+  config.py           run configuration; hashes into run_id / corpus_id / index_id
+  data/amazon.py      corpus streaming, row -> document flattening, checksums
+  chunking.py         whole document / fixed size / sentence aware
   embedding.py        sentence-transformers wrapper with a vector cache
-  vectorstores/       FAISS flat + a pluggable VectorStore base class
+  vectorstore.py      exact FAISS index
   retrieval.py        dense, BM25, hybrid RRF, optional cross-encoder rerank
   evalset/build.py    deterministic question generator
   metrics/retrieval   hit@k, recall@k, precision@k, MRR, nDCG
-  pipeline.py         the full run, with per-stage caching
-  report.py           the leaderboard, shared by CLI and notebooks
-notebooks/            the guided walkthrough — start at 00
-configs/              generated experiment matrix (14 + smoke)
+  stats.py            Wilson intervals, paired McNemar, dev/test split
+  pipeline.py         one full run, with per-stage caching
+  report.py           the leaderboard
+  cli.py              doctor / build-evalset / run / sweep / compare
+
+configs/              14 experiment configs, generated from one base
 evalsets/             committed: the questions and their answers
-context/              project brief, plan, architecture, decision log
-tests/                33 offline tests — no network, no model downloads
+notebooks/            data exploration and walkthroughs
+context/              project background, plan, architecture, decision log
+tests/                44 tests, no network or model downloads required
 ```
 
-Run the tests with `poetry run pytest -q`. They take under two seconds and need no network.
-
----
-
-## Scope
-
-This repo implements **retrieval only**. There is no answer-generation step and no LLM anywhere in
-the code — an LLM cannot rescue a chunk that was never retrieved, so retrieval gets settled first.
-
-Approximate indexes, the scale ladder to 200k documents, and small-LLM comparison are planned in
-detail in [`context/02-plan.md`](context/02-plan.md) but are not implemented here.
-
-### Known limitations
-
-Stated because they make the reported numbers more credible, not less:
-
-- One corpus, one seed, 10,000 documents
-- Questions are template-generated, and their lexical construction favours BM25
-- Exact search only, so no approximate-index comparison
-- `hybrid_alpha` is untuned at 0.5
-- Settings are compared one at a time, so interactions between them are invisible
-- Everything measured on a single CPU laptop
-
----
-
-## Data and licensing
-
-See [`DATA_LICENSES.md`](DATA_LICENSES.md). The corpus is Amazon Reviews 2023 (McAuley Lab, UCSD),
-used for research with citation and downloaded rather than redistributed. No scraped or
-proprietary catalogs are used anywhere in this project.
+```bash
+poetry run pytest -q        # 44 tests, under a second
+```
 
 ## License
 

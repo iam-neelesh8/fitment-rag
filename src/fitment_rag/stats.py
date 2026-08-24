@@ -1,27 +1,14 @@
-"""Uncertainty and significance for retrieval metrics.
+"""Confidence intervals and significance tests for retrieval metrics.
 
-This module exists because the first pass at this benchmark reported a 2.5pp
-"trend" across chunking strategies and invented a mechanism to explain it. At
-n=200 the 95% interval on hit@1 is about +/-5pp and every one of those
-comparisons had p > 0.3. The differences were sampling noise.
-
-So uncertainty is no longer optional here. `leaderboard()` carries a CI on every
-score, and `compare_runs()` runs the paired test that says whether a gap is real.
-
-Two choices worth knowing:
-
-* **Wilson intervals, not normal approximation.** hit@1 is a proportion, and
-  scores here run to 0.985 where the normal approximation gives intervals that
-  cross 1.0.
-
-* **Paired exact McNemar, not a two-sample test.** Every config answers the same
-  questions, so the comparison should only look at the queries where the two
-  disagree. Ignoring the pairing throws away most of the power -- e5 vs MiniLM
-  is 65 discordant to 6, which an unpaired test would badly understate.
+Wilson intervals rather than the normal approximation, since scores reach 0.98
+where the normal approximation runs past 1.0. Paired McNemar rather than a
+two-sample test, since every config answers the same questions and ignoring
+that pairing throws away most of the statistical power.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -94,10 +81,9 @@ def compare_runs(name_a: str, name_b: str, metric: str = "hit@1") -> dict:
 def significance_table(names: list[str], metric: str = "hit@1") -> "object":
     """Every pairwise comparison among `names`, sorted by p-value.
 
-    NOTE ON MULTIPLE COMPARISONS: k configs give k(k-1)/2 tests, so at alpha
-    0.05 roughly one in twenty looks significant by chance alone. The
-    `bonferroni_significant` column applies the conservative correction. Report
-    that column, not `significant`, when scanning a whole matrix for a winner.
+    k configs give k(k-1)/2 tests, so at alpha 0.05 about one in twenty looks
+    significant by chance. Read `bonferroni_significant` when scanning the whole
+    matrix for a winner.
     """
     import pandas as pd
 
@@ -119,11 +105,10 @@ def significance_table(names: list[str], metric: str = "hit@1") -> "object":
 
 def power_for_difference(baseline: float, delta: float, n: int,
                          discordance: float = 0.15) -> float:
-    """Rough power to detect `delta` at sample size `n`, for planning only.
+    """Approximate power to detect `delta` at sample size `n`.
 
-    Uses a normal approximation to the paired sign test. Good enough to answer
-    "is n=200 enough for a 3pp difference?" -- it is not (about 0.2). It is not
-    a substitute for reporting the actual p-value.
+    Normal approximation to the paired sign test, for planning sample sizes
+    rather than for reporting.
     """
     if delta <= 0 or n <= 0:
         return 0.0
@@ -133,3 +118,56 @@ def power_for_difference(baseline: float, delta: float, n: int,
     se = math.sqrt(0.25 / n_disc)
     z = (p_shift - 0.5) / se - 1.96
     return max(0.0, min(1.0, 0.5 * (1 + math.erf(z / math.sqrt(2)))))
+
+
+# Choosing a config on the eval set and then reporting its score on that same
+# set inflates the winner. Decisions are made on `dev`, headline numbers come
+# from `test`. Assignment hashes query_id, so it is deterministic and cannot be
+# nudged afterwards by picking a seed.
+
+def split_of(query_id: str) -> str:
+    """Deterministic 50/50 assignment of a query to 'dev' or 'test'."""
+    h = hashlib.sha256(f"split:{query_id}".encode()).digest()
+    return "dev" if h[0] % 2 == 0 else "test"
+
+
+def scores_by_split(run_name: str, metric: str = "hit@1") -> dict:
+    """Score one run separately on dev and test, with intervals."""
+    runs = _run_dirs()
+    if run_name not in runs:
+        raise KeyError(f"no results for {run_name!r}")
+
+    per_query = load_per_query(runs[run_name], metric)
+    out: dict = {"run": run_name, "metric": metric}
+    for split in ("dev", "test"):
+        vals = [v for q, v in per_query.items() if split_of(q) == split]
+        hits = int(sum(vals))
+        lo, hi = wilson_interval(hits, len(vals))
+        out[split] = {"n": len(vals), "score": round(hits / len(vals), 4) if vals else None,
+                      "ci": (round(lo, 3), round(hi, 3))}
+    d, t = out["dev"]["score"], out["test"]["score"]
+    # A large gap means the ranking was partly fitted to dev.
+    out["dev_minus_test"] = round(d - t, 4) if d is not None and t is not None else None
+    return out
+
+
+def compare_runs_split(name_a: str, name_b: str, split: str = "test",
+                       metric: str = "hit@1") -> dict:
+    """Paired comparison restricted to one split. Report the `test` result."""
+    runs = _run_dirs()
+    a = load_per_query(runs[name_a], metric)
+    b = load_per_query(runs[name_b], metric)
+    shared = [q for q in sorted(set(a) & set(b)) if split_of(q) == split]
+    if not shared:
+        raise ValueError(f"no shared queries in split {split!r}")
+
+    a_wins = sum(1 for q in shared if a[q] > b[q])
+    b_wins = sum(1 for q in shared if b[q] > a[q])
+    p = mcnemar_exact(a_wins, b_wins)
+    mean_a = sum(a[q] for q in shared) / len(shared)
+    mean_b = sum(b[q] for q in shared) / len(shared)
+    return {"a": name_a, "b": name_b, "split": split, "n": len(shared),
+            "score_a": round(mean_a, 4), "score_b": round(mean_b, 4),
+            "difference": round(mean_a - mean_b, 4),
+            "a_wins": a_wins, "b_wins": b_wins,
+            "p_value": round(p, 4), "significant": p < 0.05}

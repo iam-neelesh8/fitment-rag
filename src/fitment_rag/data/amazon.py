@@ -1,14 +1,12 @@
-"""Amazon Reviews 2023 -- Automotive product metadata.
+"""Amazon Reviews 2023, Automotive product metadata.
 
-License: research use, citation required (McAuley Lab, UCSD). See DATA_LICENSES.md.
-Nothing from this dataset is redistributed here; we stream it at build time and
-cache to data/raw/, which is gitignored.
+Research use with citation (McAuley Lab, UCSD); see DATA_LICENSES.md. Nothing is
+redistributed -- the corpus is streamed at build time and cached to data/raw/.
 
-Why raw HTTP streaming instead of `datasets.load_dataset`:
-`datasets` 4.x removed support for script-based loaders, and this repo ships one
-(`Amazon-Reviews-2023.py`), so `load_dataset` now raises. The underlying file is
-plain JSONL, so we stream it line by line over HTTP and stop as soon as we have
-enough rows. The full file is 5.35 GB -- it is never downloaded whole.
+Streamed over HTTP rather than through `datasets.load_dataset`, which no longer
+works: version 4.x dropped script-based loaders and this dataset still ships
+one. The source file is plain JSONL and 5.35 GB, so it is read line by line and
+abandoned once enough rows are collected.
 """
 
 from __future__ import annotations
@@ -36,11 +34,10 @@ def _clean(value: Any) -> str:
 
 
 def _doc_text(row: dict[str, Any]) -> str:
-    """Flatten one product-metadata row into a single retrievable document.
+    """Flatten one product row into a single retrievable document.
 
-    Field labels ("Title:", "Brand/Store:") are deliberate: they give the
-    embedder lexical anchors, so a query containing the word "brand" has
-    something to match against.
+    Field labels give the embedder lexical anchors, so a query mentioning
+    "brand" has something to match.
     """
     parts: list[str] = []
 
@@ -104,10 +101,10 @@ def _to_document(row: dict[str, Any], index: int) -> dict[str, Any] | None:
 
 
 def stream_rows(cfg: DataConfig, limit: int | None = None) -> Iterator[dict[str, Any]]:
-    """Yield raw JSON rows straight from the Hugging Face file, newest bytes first.
+    """Yield raw rows from the Hugging Face file, in file order.
 
-    Stops as soon as the caller stops consuming -- the connection is closed by the
-    context manager, so we only ever pull the prefix we actually need.
+    Stops as soon as the caller stops consuming, so only the needed prefix is
+    ever transferred.
     """
     url = HF_BASE.format(repo=cfg.hf_repo, path=cfg.hf_file)
     with requests.get(url, stream=True, timeout=cfg.timeout_s) as resp:
@@ -124,17 +121,11 @@ def stream_rows(cfg: DataConfig, limit: int | None = None) -> Iterator[dict[str,
 
 
 def _sample(cfg: DataConfig) -> list[dict[str, Any]]:
-    """Take every `stride`-th usable row until we have n_docs of them.
+    """Take every `stride`-th usable row until n_docs are collected.
 
-    This is a deterministic *prefix scan*, not a uniform random sample over all
-    ~2M rows -- drawing uniformly would mean streaming the entire 5.35 GB file
-    for even a 1k corpus. The stride spreads the sample across a wider window at
-    bounded cost, and the result is exactly reproducible: anyone reading the same
-    file from the start with the same stride and seed lands on the same corpus,
-    which is what corpus_checksum() lets them verify.
-
-    Consequence worth stating in a writeup: the scale ladder is nested, so a 10k
-    corpus is a superset of the 1k corpus at the same stride.
+    A deterministic prefix scan, not a uniform sample: drawing uniformly would
+    mean streaming all 5.35 GB for even a 1k corpus. Reproducible, and nested --
+    a 10k corpus is a superset of the 1k corpus at the same stride.
     """
     stride = max(1, cfg.stride)
     docs: list[dict[str, Any]] = []

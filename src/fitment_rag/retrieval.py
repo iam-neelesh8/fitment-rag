@@ -1,8 +1,4 @@
-"""Retrievers: dense, BM25, and reciprocal-rank-fusion hybrid.
-
-BM25 is the honesty check in this benchmark. If a 400MB embedding model can't
-beat a keyword baseline on your corpus, that's the finding -- report it.
-"""
+"""Dense, BM25, and reciprocal-rank-fusion hybrid retrieval."""
 
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ import numpy as np
 
 from .config import RetrievalConfig
 from .embedding import Embedder
-from .vectorstores.base import VectorStore
+from .vectorstore import FaissIndex
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -29,7 +25,7 @@ class Retriever:
         cfg: RetrievalConfig,
         chunks: list[dict[str, Any]],
         embedder: Embedder | None = None,
-        store: VectorStore | None = None,
+        store: FaissIndex | None = None,
     ):
         self.cfg = cfg
         self.chunks = chunks
@@ -79,14 +75,9 @@ class Retriever:
     def _best_chunk_per_document(ids: list[str], scores: list[float], k: int):
         """Collapse a chunk ranking to its top-k distinct documents.
 
-        Without this, `top_k` counts CHUNKS while the metrics count DOCUMENTS,
-        which silently confounds any chunking comparison: a config producing
-        7.4 chunks per document fits fewer distinct documents into a 5-chunk
-        window than one producing 1.0, so it is handed fewer chances to be
-        right for reasons that have nothing to do with retrieval quality.
-
-        Measured on this corpus before the fix -- distinct documents inside the
-        top-5 chunks: whole_doc 5.00, fixed1024 4.44, sentence512 4.04.
+        Metrics score documents, so top_k must count documents too. Counting
+        chunks gives configs with fewer chunks per document more distinct
+        candidates for free, which biases the chunking comparison.
         """
         out_ids, out_scores, seen = [], [], set()
         for cid, s in zip(ids, scores):
@@ -102,8 +93,7 @@ class Retriever:
 
     def retrieve(self, queries: list[str]) -> tuple[list[list[str]], list[list[float]], float]:
         cfg = self.cfg
-        # Always search deep enough that dedupe can still fill top_k documents:
-        # at 7.4 chunks/doc, five documents can need ~37 chunks of headroom.
+        # Search deep enough that dedupe can still fill top_k documents.
         depth = max(cfg.top_k, cfg.candidate_k)
         start = time.perf_counter()
 

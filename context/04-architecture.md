@@ -8,17 +8,12 @@ src/fitment_rag/        the library -- notebooks import from here, nothing dupli
   data/amazon.py        HTTP streaming, row -> document flattening, corpus checksum
   chunking.py           whole_doc / fixed / sentence
   embedding.py          sentence-transformers wrapper with a vector cache
-  vectorstores/
-    base.py             the VectorStore interface (build / search / save / load)
-    faiss_store.py      flat, HNSW, IVF
-    chroma_store.py     persistent local Chroma
-    registry.py         backend name -> class
+  vectorstore.py        exact FAISS index (build / search / save / load)
+  stats.py              Wilson intervals, paired McNemar, dev/test split
   retrieval.py          dense, BM25, hybrid RRF, optional cross-encoder rerank
   generation.py         Ollama client, one prompt, temperature 0
   evalset/build.py      template (deterministic) and LLM question generators
-  metrics/
-    retrieval.py        hit@k, recall@k, precision@k, mrr, ndcg@k
-    answer.py           exact match, contains, token F1, abstain rate
+  metrics/retrieval.py  hit@k, recall@k, precision@k, mrr, ndcg@k
   pipeline.py           the full run, with per-stage caching
   report.py             leaderboard, shared by CLI and notebooks
   cli.py                doctor / build-evalset / run / sweep / compare

@@ -1,8 +1,7 @@
-"""Typed, YAML-backed run configuration.
+"""Run configuration, loaded from YAML.
 
-Every experiment in this benchmark is fully described by one config file. The
-config is hashed into the run id, so a run's directory name is a fingerprint of
-the settings that produced it -- that is what makes the leaderboard honest.
+One config file fully describes one experiment. The config hashes into the run
+id, so a results directory names the exact settings that produced it.
 """
 
 from __future__ import annotations
@@ -23,14 +22,10 @@ RESULTS_DIR = REPO_ROOT / "results"
 class DataConfig(BaseModel):
     source: Literal["amazon_automotive"] = "amazon_automotive"
     hf_repo: str = "McAuley-Lab/Amazon-Reviews-2023"
-    # The raw JSONL, streamed directly. `datasets` 4.x dropped script loaders,
-    # which this dataset still ships, so load_dataset() no longer works.
     hf_file: str = "raw/meta_categories/meta_Automotive.jsonl"
-    # Corpus size ladder: 1k (smoke) -> 10k -> 50k -> 200k.
     n_docs: int = 1000
-    # Take every Nth usable row. Spreads the sample over a wider slice of the
-    # file at bounded cost; set to 1 for large corpora to avoid over-streaming.
-    stride: int = 4
+    stride: int = 4          # keep every Nth usable row
+
     timeout_s: int = 120
     seed: int = 17
 
@@ -51,19 +46,15 @@ class EmbeddingConfig(BaseModel):
 
 
 class VectorStoreConfig(BaseModel):
-    # Phase 1 only needs exact search. Approximate backends (HNSW, IVF) and
-    # alternative stores are a Phase 2 concern -- see context/02-plan.md.
+    """Exact search only. Approximate indexes are out of scope here."""
+
     backend: Literal["faiss_flat"] = "faiss_flat"
-    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievalConfig(BaseModel):
     mode: Literal["dense", "bm25", "hybrid"] = "dense"
     top_k: int = 5
-    # What top_k counts. Metrics are scored per DOCUMENT, so counting chunks
-    # here would hand configs with fewer chunks-per-document more distinct
-    # candidates for free -- a confound that falls entirely on the chunking
-    # comparison. "chunk" reproduces the older, biased behaviour.
+    # What top_k counts. Metrics score documents, so this should too.
     unit: Literal["document", "chunk"] = "document"
     candidate_k: int = 50       # search depth before dedupe / fusion / rerank
     hybrid_alpha: float = 0.5   # 1.0 = pure dense, 0.0 = pure bm25
@@ -109,10 +100,10 @@ class RunConfig(BaseModel):
 
     @property
     def index_id(self) -> str:
-        """Identifies a (corpus, embedding, vectorstore) triple -- indexes cache by this.
+        """Cache key for embeddings and the index.
 
-        Deliberately excludes retrieval and eval settings, so switching between
-        dense / bm25 / hybrid reuses the same embeddings and index.
+        Excludes retrieval and eval settings, so switching between dense, bm25
+        and hybrid reuses the same vectors.
         """
         payload = {
             "corpus": self.corpus_id,

@@ -1,0 +1,13 @@
+run,embedder,chunking,retrieval,rerank,unit,chunks,n,hit@1,ci_low,ci_high,+/-pp,hit@5,mrr,ndcg@5,ms/query
+ret-hybrid-rerank,e5-small-v2,fixed/512,hybrid,yes,document,39026,2000,0.9805,0.973,0.986,0.6,0.999,0.9891,0.9916,1373.04
+ret-hybrid,e5-small-v2,fixed/512,hybrid,-,document,39026,2000,0.929,0.917,0.939,1.1,0.9935,0.9577,0.9669,80.18
+ret-bm25,e5-small-v2,fixed/512,bm25,-,document,39026,2000,0.925,0.913,0.936,1.2,0.991,0.9532,0.9628,81.3
+chunk-sent512,e5-small-v2,sentence/512,dense,-,document,37277,2000,0.879,0.864,0.893,1.4,0.9625,0.9148,0.9269,3.25
+chunk-fixed256,e5-small-v2,fixed/256,dense,-,document,73147,2000,0.8685,0.853,0.883,1.5,0.9685,0.9104,0.9251,3.48
+chunk-fixed1024,e5-small-v2,fixed/1024,dense,-,document,21971,2000,0.867,0.851,0.881,1.5,0.956,0.9032,0.9166,3.19
+chunk-whole,e5-small-v2,whole_doc/512,dense,-,document,10000,2000,0.8585,0.843,0.873,1.5,0.964,0.9019,0.9176,3.27
+chunk-fixed512,e5-small-v2,fixed/512,dense,-,document,39026,2000,0.8575,0.841,0.872,1.5,0.952,0.8966,0.9106,3.25
+emb-e5-small,e5-small-v2,fixed/512,dense,-,document,39026,2000,0.8575,0.841,0.872,1.5,0.952,0.8966,0.9106,4.48
+emb-bge-small,bge-small-en-v1.5,fixed/512,dense,-,document,39026,2000,0.7645,0.745,0.783,1.9,0.9025,0.8193,0.8403,4.74
+emb-gte-small,gte-small,fixed/512,dense,-,document,39026,2000,0.659,0.638,0.679,2.1,0.8725,0.7418,0.7746,27.33
+emb-minilm-l6,all-MiniLM-L6-v2,fixed/512,dense,-,document,39026,2000,0.525,0.503,0.547,2.2,0.7205,0.6002,0.6304,1.74
