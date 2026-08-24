@@ -9,6 +9,8 @@ no paid services.
 
 **Answer: the embedding model, by a wide margin.**
 
+![Which part of a RAG pipeline actually matters](assets/summary.gif)
+
 ---
 
 ## Results
@@ -55,6 +57,14 @@ Paired comparisons on the same split:
 | hybrid vs BM25 | +1.3 pp | 48–36 | **0.230 (tied)** |
 
 </details>
+
+<p align="center">
+  <a href="assets/summary-diagram.png">
+    <img src="assets/summary-diagram.png" width="820"
+         alt="Pipeline, experiment matrix, and results on one page">
+  </a>
+  <br><em>The whole study on one page — click to enlarge</em>
+</p>
 
 ### Three things worth pulling out
 
