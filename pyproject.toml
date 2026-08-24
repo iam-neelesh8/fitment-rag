@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fitment-rag"
+version = "0.1.0"
+description = "Phase 1 of an open, reproducible RAG retrieval benchmark for auto-parts data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    # Scope: Phase 1 is RETRIEVAL ONLY -- no generation, no LLM, no Ollama, and
+    # exact search only. Phases 2-4 (approximate indexes, scale, generation) are
+    # planned in context/02-plan.md but not implemented, so nothing they would
+    # need is a dependency here.
+    #
+    # `datasets` is deliberately absent: version 4.x removed script-based
+    # loaders, which Amazon-Reviews-2023 still ships, so the corpus is streamed
+    # as raw JSONL over HTTP instead. See data/amazon.py.
+    "huggingface-hub>=0.25",   # model downloads for sentence-transformers
+    "sentence-transformers>=3.0",
+    "torch>=2.2",
+    "faiss-cpu>=1.8",
+    "rank-bm25>=0.2.2",        # the BM25 baseline -- Phase 1c
+    "numpy>=1.26",
+    "pandas>=2.2",             # leaderboard only, not the pipeline
+    "pyyaml>=6.0",
+    "pydantic>=2.7",
+    "requests>=2.32",          # corpus streaming
+    "tabulate>=0.9",           # DataFrame.to_markdown in the CLI
+]
+
+[project.optional-dependencies]
+# Notebook workflow (the main interface -- see notebooks/)
+nb = [
+    "jupyterlab>=4.2",
+    "ipykernel>=6.29",
+    "matplotlib>=3.9",
+    "ipywidgets>=8.1",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+fitment-rag = "fitment_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

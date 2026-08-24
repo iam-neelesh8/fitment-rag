@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- fitment-rag ---
+# Corpus, chunks, embeddings and indexes are REGENERATED, never redistributed.
+# See DATA_LICENSES.md.
+data/raw/
+data/chunks/
+data/embeddings/
+data/indexes/
+
+# Run outputs are large; the leaderboard summary is committed instead.
+results/*/
+!results/.gitkeep
+
+# Poetry local config (venv path, keeps Windows paths short)
+# poetry.toml is committed intentionally -- see README
+
+# Executed notebook outputs are kept; they are the evidence.

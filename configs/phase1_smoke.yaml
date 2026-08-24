@@ -1,0 +1,29 @@
+# Smoke test -- the smallest run that exercises every Phase 1 stage end to end.
+# 1k docs, 22M-param embedder, exact FAISS, retrieval only. Minutes on a CPU laptop.
+name: smoke
+
+data:
+  n_docs: 10000
+  stride: 4
+  seed: 17
+
+chunking:
+  strategy: fixed
+  chunk_size: 512
+  chunk_overlap: 64
+
+embedding:
+  model: sentence-transformers/all-MiniLM-L6-v2
+  batch_size: 32
+
+vectorstore:
+  backend: faiss_flat
+
+retrieval:
+  mode: dense
+  top_k: 5
+
+eval:
+  eval_set: evalsets/amazon_automotive_10k.jsonl
+  ks: [1, 3, 5, 10]
+  limit: 50
