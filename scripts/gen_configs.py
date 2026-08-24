@@ -21,10 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = {
     "data": {"source": "amazon_automotive", "n_docs": 10000, "stride": 4, "seed": 17},
     "chunking": {"strategy": "fixed", "chunk_size": 512, "chunk_overlap": 64},
-    "embedding": {"model": "sentence-transformers/all-MiniLM-L6-v2", "batch_size": 32},
+    # e5-small is the Phase 1a winner (hit@1 0.840 vs MiniLM 0.545), so it is the
+    # default every other comparison is run against. Comparing BM25 or a chunking
+    # strategy against the weakest embedder would not be a fair test.
+    "embedding": {"model": "intfloat/e5-small-v2", "batch_size": 32,
+                  "query_prefix": "query: ", "doc_prefix": "passage: "},
     "vectorstore": {"backend": "faiss_flat"},
     "retrieval": {"mode": "dense", "top_k": 5, "candidate_k": 50},
-    "eval": {"eval_set": "evalsets/amazon_automotive_10k.jsonl", "ks": [1, 3, 5, 10]},
+    "eval": {"eval_set": "evalsets/amazon_automotive_10k_n2000.jsonl", "ks": [1, 3, 5, 10]},
 }
 
 # name, HF model id, params, query prefix, doc prefix

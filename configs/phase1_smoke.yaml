@@ -24,6 +24,6 @@ retrieval:
   top_k: 5
 
 eval:
-  eval_set: evalsets/amazon_automotive_10k.jsonl
+  eval_set: evalsets/amazon_automotive_10k_n2000.jsonl
   ks: [1, 3, 5, 10]
-  limit: 50
+

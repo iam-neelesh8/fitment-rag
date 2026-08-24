@@ -8,8 +8,10 @@ chunking:
   chunk_size: 512
   chunk_overlap: 64
 embedding:
-  model: sentence-transformers/all-MiniLM-L6-v2
+  model: intfloat/e5-small-v2
   batch_size: 32
+  query_prefix: 'query: '
+  doc_prefix: 'passage: '
 vectorstore:
   backend: faiss_flat
 retrieval:
@@ -18,7 +20,7 @@ retrieval:
   candidate_k: 50
   hybrid_alpha: 0.5
 eval:
-  eval_set: evalsets/amazon_automotive_10k.jsonl
+  eval_set: evalsets/amazon_automotive_10k_n2000.jsonl
   ks:
   - 1
   - 3

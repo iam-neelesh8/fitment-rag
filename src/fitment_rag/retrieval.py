@@ -75,9 +75,36 @@ class Retriever:
         ordered = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:k]
         return [cid for cid, _ in ordered], [s for _, s in ordered]
 
+    @staticmethod
+    def _best_chunk_per_document(ids: list[str], scores: list[float], k: int):
+        """Collapse a chunk ranking to its top-k distinct documents.
+
+        Without this, `top_k` counts CHUNKS while the metrics count DOCUMENTS,
+        which silently confounds any chunking comparison: a config producing
+        7.4 chunks per document fits fewer distinct documents into a 5-chunk
+        window than one producing 1.0, so it is handed fewer chances to be
+        right for reasons that have nothing to do with retrieval quality.
+
+        Measured on this corpus before the fix -- distinct documents inside the
+        top-5 chunks: whole_doc 5.00, fixed1024 4.44, sentence512 4.04.
+        """
+        out_ids, out_scores, seen = [], [], set()
+        for cid, s in zip(ids, scores):
+            did = cid.split("::", 1)[0]
+            if did in seen:
+                continue
+            seen.add(did)
+            out_ids.append(cid)
+            out_scores.append(s)
+            if len(out_ids) >= k:
+                break
+        return out_ids, out_scores
+
     def retrieve(self, queries: list[str]) -> tuple[list[list[str]], list[list[float]], float]:
         cfg = self.cfg
-        depth = max(cfg.top_k, cfg.candidate_k if (cfg.reranker or cfg.mode == "hybrid") else cfg.top_k)
+        # Always search deep enough that dedupe can still fill top_k documents:
+        # at 7.4 chunks/doc, five documents can need ~37 chunks of headroom.
+        depth = max(cfg.top_k, cfg.candidate_k)
         start = time.perf_counter()
 
         if cfg.mode == "dense":
@@ -97,8 +124,15 @@ class Retriever:
         if self._reranker is not None:
             ids, scores = self._rerank(queries, ids)
 
-        ids = [row[: cfg.top_k] for row in ids]
-        scores = [row[: cfg.top_k] for row in scores]
+        if cfg.unit == "document":
+            trimmed = [self._best_chunk_per_document(i, s, cfg.top_k)
+                       for i, s in zip(ids, scores)]
+            ids = [t[0] for t in trimmed]
+            scores = [t[1] for t in trimmed]
+        else:
+            ids = [row[: cfg.top_k] for row in ids]
+            scores = [row[: cfg.top_k] for row in scores]
+
         elapsed = time.perf_counter() - start
         return ids, scores, elapsed
 

@@ -60,7 +60,12 @@ class VectorStoreConfig(BaseModel):
 class RetrievalConfig(BaseModel):
     mode: Literal["dense", "bm25", "hybrid"] = "dense"
     top_k: int = 5
-    candidate_k: int = 50       # pre-fusion / pre-rerank depth
+    # What top_k counts. Metrics are scored per DOCUMENT, so counting chunks
+    # here would hand configs with fewer chunks-per-document more distinct
+    # candidates for free -- a confound that falls entirely on the chunking
+    # comparison. "chunk" reproduces the older, biased behaviour.
+    unit: Literal["document", "chunk"] = "document"
+    candidate_k: int = 50       # search depth before dedupe / fusion / rerank
     hybrid_alpha: float = 0.5   # 1.0 = pure dense, 0.0 = pure bm25
     reranker: str | None = None  # cross-encoder model id, or None
 
