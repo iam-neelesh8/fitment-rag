@@ -112,3 +112,20 @@ def test_index_id_ignores_retrieval_but_not_chunking():
     assert a.index_id == b.index_id      # switching retrieval mode reuses the index
     b.chunking.chunk_size = 999
     assert a.index_id != b.index_id      # chunking must invalidate it
+
+
+# --- eval set / corpus mismatch -------------------------------------------
+
+def test_reachability_maths_matches_the_observed_failure():
+    """A corpus containing 409 of 2000 gold documents caps hit@1 at 0.204.
+
+    Reusing a stride-4 eval set against a stride-5 corpus produced 0.171 for a
+    model that scores 0.856 on its own corpus -- a plausible-looking number from
+    a broken experiment. pipeline.run() now refuses to run below 99% reachable.
+    """
+    gold = {f"D{i}" for i in range(2000)}
+    corpus = {f"D{i}" for i in range(409)} | {f"X{i}" for i in range(9591)}
+
+    reachable = len(gold & corpus) / len(gold)
+    assert reachable < 0.99                      # the guard fires
+    assert abs(reachable - 0.204) < 0.005        # and reports this ceiling

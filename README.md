@@ -54,7 +54,8 @@ Paired comparisons on the same split:
 | rerank vs hybrid | +4.4 pp | 54–12 | <0.0001 |
 | sentence-512 vs whole documents | +2.5 pp | 62–38 | 0.021 |
 | sentence-512 vs fixed-512 | +2.2 pp | 44–23 | 0.014 |
-| hybrid vs BM25 | +1.3 pp | 48–36 | **0.230 (tied)** |
+| hybrid (alpha=0.5) vs BM25 | +1.3 pp | 48–36 | 0.230 (tied) |
+| hybrid (alpha=0.35) vs BM25 | +2.1 pp | 34–14 | **0.0055** |
 
 </details>
 
@@ -74,9 +75,18 @@ codes — rare tokens that BM25 weights heavily and embedding models represent p
 the default scorer in Elasticsearch, so this is worth knowing before planning a migration to
 vector search.
 
-**Hybrid retrieval is not better than BM25 alone** (p = 0.23). Combining the two at equal weight
-buys nothing here. `hybrid_alpha` was left untuned at 0.5, so this is a statement about the
-default, not about hybrid search in general.
+**Hybrid retrieval helps, but only when weighted toward keywords.** At the common default of
+`hybrid_alpha = 0.5` it ties BM25 (0.929 vs 0.925, p = 0.23) — which is what an earlier version of
+this README reported. Sweeping the weight shows that default sits in a dip:
+
+| alpha | 0.00 | 0.20 | 0.35 | 0.50 | 0.65 | 0.80 | 1.00 |
+|---|---|---|---|---|---|---|---|
+| hit@1 | 0.925 | 0.940 | **0.941** | 0.929 | 0.928 | 0.910 | 0.858 |
+
+Around 0.35 — roughly one-third dense, two-thirds keyword — hybrid beats pure BM25 by **2.1 pp
+(p = 0.0055)** on held-out questions. The defensible claim is the shape, not the exact peak:
+0.20 and 0.35 are indistinguishable from each other, and the peak was chosen by looking at these
+same results.
 
 **Chunking barely matters, and only sentence-aware splitting helps.** The best strategy beats the
 worst by 2.5 pp. `sentence-512` and `fixed-512` produce almost identical chunk counts (37,277 vs
@@ -275,16 +285,16 @@ used anywhere in this project.
 
 ## Limitations
 
-- **One corpus, one domain, one sample.** A single prefix sample of one dataset, not multiple
-  seeds. Treat this as a case study, not a general result.
+- **One domain.** Auto-parts product listings only. Nothing here says how these results transfer
+  to long documents, technical manuals, or support tickets.
+- **Chunking and retrieval results come from a single sample.** The embedding result was
+  replicated on a second, independent 10,000-document sample (gap of 33.3 and 32.1 pp, sharing
+  ~5% of documents); the other two were not.
 - **Questions are templated.** Terms are drawn from product titles and validated by lexical
   overlap, which favours BM25. The task is closer to entity lookup than to open-ended question
   answering.
 - **The task may be near ceiling.** Reranking reaches 0.981 and `hit@5` exceeds 0.95 nearly
   everywhere, so `hit@5` no longer separates configurations.
-- **The MiniLM result deserves a second look.** A 33.8 pp gap between two models of the same size
-  class is larger than public benchmarks would predict. Worth confirming that tokenizer settings
-  are equivalent before treating it as a model property.
 - **Timings are unreliable.** Measured on a thermally throttled laptop while other work was
   running. `gte-small` at 27 ms/query against 4 ms for identically sized models is almost
   certainly contention, not a model property.

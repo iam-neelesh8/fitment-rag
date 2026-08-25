@@ -95,6 +95,21 @@ def run(cfg: RunConfig, *, verbose: bool = True) -> RunArtifacts:
     if verbose:
         print(f"[eval]   {len(queries)} queries from {eval_path.name}")
 
+    # An eval set built from a different corpus scores badly but does not crash,
+    # which looks like a model result instead of a broken experiment. Check that
+    # the answers are actually reachable before spending time retrieving them.
+    corpus_docs = {d["doc_id"] for d in docs}
+    gold = {d for q in queries for d in q["relevant_doc_ids"]}
+    reachable = len(gold & corpus_docs) / len(gold)
+    if reachable < 0.99:
+        raise ValueError(
+            f"only {reachable:.1%} of gold documents exist in this corpus "
+            f"({len(gold & corpus_docs)}/{len(gold)}). The eval set was built for a "
+            f"different corpus, so hit@1 is capped at {reachable:.3f} no matter how "
+            f"good retrieval is. Rebuild it with: "
+            f"fitment-rag build-evalset --config <this config> --out <new path>"
+        )
+
     retriever = Retriever(cfg.retrieval, chunks, embedder=embedder, store=store)
     questions = [q["question"] for q in queries]
     retrieved, scores, retrieval_seconds = retriever.retrieve(questions)
